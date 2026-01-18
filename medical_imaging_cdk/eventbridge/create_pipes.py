@@ -6,20 +6,23 @@ from aws_cdk import (
 from constructs import Construct
 
 
-def create_metadata_pipe(
+def create_document_watch_pipe(
     scope: Construct,
-    metadata_table: dynamodb.Table,
+    *,
+    document_watch_table: dynamodb.Table,
     s3_upload_queue: sqs.Queue,
     role_arn: str,
 ) -> pipes.CfnPipe:
     """
-    Create an EventBridge Pipe that connects DynamoDB streams from the metadata table to an SQS queue.
+    Create EventBridge Pipe: DocumentWatch (DynamoDB stream) -> documentToS3UploadQueue (SQS)
+    
+    Triggered by inserts to DocumentWatch table to download images to an SQS queue.
     
     This pipe forwards new image metadata entries to the S3 upload processing queue.
     
     Args:
         scope: The CDK construct scope
-        metadata_table: Source DynamoDB table with stream enabled
+        document_watch_table: Source DynamoDB table with stream enabled
         s3_upload_queue: Target SQS queue for processing
         role_arn: ARN of the IAM role with permissions for the pipe
         
@@ -29,10 +32,10 @@ def create_metadata_pipe(
     # Create pipe connecting DynamoDB stream to SQS
     pipe = pipes.CfnPipe(
         scope,
-        "MetadataToS3UploadPipe",
-        name="metadata-to-s3-upload-pipe",
+        "DocumentWatchToS3UploadPipe",
+        name="document-watch-to-s3-upload-pipe",
         role_arn=role_arn,
-        source=f"arn:aws:dynamodb:{scope.region}:{scope.account}:table/{metadata_table.table_name}/stream/*",
+        source=document_watch_table.table_stream_arn,
         source_parameters=pipes.CfnPipe.PipeSourceParametersProperty(
             dynamodb_stream_parameters=pipes.CfnPipe.PipeSourceDynamoDBStreamParametersProperty(
                 starting_position="LATEST",
@@ -71,10 +74,11 @@ def create_metadata_pipe(
     return pipe
 
 
-def create_results_pipe(
+def create_ddx_results_pipe(
     scope: Construct,
-    results_table: dynamodb.Table,
-    analysis_queue: sqs.Queue,
+    *,
+    ddx_results_table: dynamodb.Table,
+    composition_queue: sqs.Queue,
     role_arn: str,
 ) -> pipes.CfnPipe:
     """
@@ -84,8 +88,8 @@ def create_results_pipe(
     
     Args:
         scope: The CDK construct scope
-        results_table: Source DynamoDB table with stream enabled
-        analysis_queue: Target SQS queue for processing
+        ddx_results_table: Source DynamoDB table with stream enabled
+        composition_queue: Target SQS queue for processing
         role_arn: ARN of the IAM role with permissions for the pipe
         
     Returns:
@@ -94,10 +98,10 @@ def create_results_pipe(
     # Create pipe connecting DynamoDB stream to SQS
     pipe = pipes.CfnPipe(
         scope,
-        "ResultsToAnalysisQueuePipe",
-        name="results-to-analysis-queue-pipe",
+        "DdxResultsToCompositionQueuePipe",
+        name="DdxAssistResults-CompositionQueue-Pipe",
         role_arn=role_arn,
-        source=f"arn:aws:dynamodb:{scope.region}:{scope.account}:table/{results_table.table_name}/stream/*",
+        source=ddx_results_table.table_stream_arn,
         source_parameters=pipes.CfnPipe.PipeSourceParametersProperty(
             dynamodb_stream_parameters=pipes.CfnPipe.PipeSourceDynamoDBStreamParametersProperty(
                 starting_position="LATEST",
@@ -114,7 +118,7 @@ def create_results_pipe(
                 ]
             ),
         ),
-        target=analysis_queue.queue_arn,
+        target=composition_queue.queue_arn,
         target_parameters=pipes.CfnPipe.PipeTargetParametersProperty(
             sqs_queue_parameters=pipes.CfnPipe.PipeTargetSqsQueueParametersProperty(
                 message_deduplication_id="$.dynamodb.NewImage.imageId.S",

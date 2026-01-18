@@ -1,117 +1,52 @@
+from typing import Optional
+from constructs import Construct
 from aws_cdk import (
-    aws_stepfunctions as sfn,
-    aws_stepfunctions_tasks as tasks,
     aws_lambda as lambda_,
     aws_logs as logs,
+    aws_stepfunctions as sfn,
+    aws_iam as iam,
 )
-from constructs import Construct
 
 
-def create_imaging_state_machine(
+def create_poller_state_machine(
     scope: Construct,
-    metadata_extractor_fn: lambda_.Function,
-    image_processor_fn: lambda_.Function,
-    ai_analyzer_fn: lambda_.Function,
-    log_group: logs.LogGroup,
+    *,
+    refresh_creds_fn: lambda_.Function,
+    encounter_poller_fn: lambda_.Function,
+    document_poller_fn: lambda_.Function,
+    state_machine_name: str = "ai-ddx-assist-poller",
+    log_group: Optional[logs.ILogGroup] = None,
+    role: Optional[iam.IRole] = None,  # If you already have a role; otherwise let CDK create one
 ) -> sfn.StateMachine:
     """
-    Create a Step Functions state machine that orchestrates the medical imaging analysis workflow.
-    
-    Args:
-        scope: The CDK construct scope
-        metadata_extractor_fn: Lambda function that extracts metadata from incoming images
-        image_processor_fn: Lambda function that processes the medical images
-        ai_analyzer_fn: Lambda function that performs AI analysis on the processed images
-        log_group: CloudWatch log group for state machine execution logs
-        
-    Returns:
-        The created Step Functions state machine
+    Instantiate the Step Functions State Machine from ASL file with lambda ARN substitutions.
+    Expects template at: medical_imaging_cdk/step_functions/template.yaml
     """
-    # Define the Lambda tasks
-    extract_metadata_task = tasks.LambdaInvoke(
-        scope,
-        "ExtractMetadata",
-        lambda_function=metadata_extractor_fn,
-        payload=sfn.TaskInput.from_object({
-            "executionId.$": "$$.Execution.Id",
-            "timestamp.$": "$$.State.EnteredTime",
-            "input.$": "$"
-        }),
-        result_path="$.metadataResult",
+    definition = sfn.DefinitionBody.from_file(
+        "medical_imaging_cdk/step_functions/template.yaml"
     )
-    
-    process_image_task = tasks.LambdaInvoke(
-        scope,
-        "ProcessImage",
-        lambda_function=image_processor_fn,
-        payload=sfn.TaskInput.from_object({
-            "metadataResult.$": "$.metadataResult.Payload",
-            "executionId.$": "$$.Execution.Id",
-            "timestamp.$": "$$.State.EnteredTime"
-        }),
-        result_path="$.processingResult",
-    )
-    
-    analyze_image_task = tasks.LambdaInvoke(
-        scope,
-        "AnalyzeImage",
-        lambda_function=ai_analyzer_fn,
-        payload=sfn.TaskInput.from_object({
-            "processingResult.$": "$.processingResult.Payload",
-            "metadataResult.$": "$.metadataResult.Payload",
-            "executionId.$": "$$.Execution.Id",
-            "timestamp.$": "$$.State.EnteredTime"
-        }),
-        result_path="$.analysisResult",
-    )
-    
-    # Define error handler
-    handle_error = sfn.Pass(
-        scope,
-        "HandleError",
-        parameters={
-            "error.$": "$.error",
-            "cause.$": "$.cause",
-            "status": "ERROR"
-        },
-        result_path="$.errorInfo"
-    )
-    
-    # Define retry policies
-    standard_retry = sfn.RetryProps(
-        max_attempts=3,
-        interval=sfn.Duration.seconds(2),
-        backoff_rate=2,
-        errors=["Lambda.ServiceException", "Lambda.ResourceNotFoundException"],
-    )
-    
-    # Create workflow definition
-    workflow_definition = (
-        extract_metadata_task
-        .add_retry(standard_retry)
-        .add_catch(handle_error, result_path="$.error")
-        .next(
-            process_image_task
-            .add_retry(standard_retry)
-            .add_catch(handle_error, result_path="$.error")
-            .next(
-                analyze_image_task
-                .add_retry(standard_retry)
-                .add_catch(handle_error, result_path="$.error")
-            )
-        )
-    )
-    
-    # Create state machine
-    state_machine = sfn.StateMachine(
-        scope,
-        "MedicalImagingWorkflow",
-        state_machine_name="medical-imaging-workflow",
-        definition=workflow_definition,
-        logs=sfn.LogOptions(
+    substitutions = {
+        "PLACEHOLDER_FUNCTION_ARN_1": refresh_creds_fn.function_arn,
+        "PLACEHOLDER_FUNCTION_ARN_2": encounter_poller_fn.function_arn,
+        "PLACEHOLDER_FUNCTION_ARN_3": document_poller_fn.function_arn,
+    }
+
+    logs_config = None
+    if log_group:
+        logs_config = sfn.LogOptions(
             destination=log_group,
             level=sfn.LogLevel.ALL,
-        ),
+            include_execution_data=True,
+        )
+
+    return sfn.StateMachine(
+        scope,
+        "AiDdxAssistPollerStateMachine",
+        state_machine_name=state_machine_name,
+        definition_body=definition,
+        definition_substitutions=substitutions,
+        state_machine_type=sfn.StateMachineType.EXPRESS,
+        logs=logs_config,
+        role=role,  # optional
+        tracing_enabled=True,
     )
-    
-    return state_machine

@@ -2,78 +2,78 @@ from aws_cdk import aws_dynamodb as dynamodb
 from constructs import Construct
 
 
-def create_patient_records_table(scope: Construct) -> dynamodb.Table:
-    """Create and return the PatientRecords DynamoDB table with GSIs."""
+def create_encounter_watch_table(scope: Construct) -> dynamodb.Table:
+    """Create and return the EncounterWatch DynamoDB table with GSIs."""
     table = dynamodb.Table(
         scope,
-        "PatientRecords",
+        "EncounterWatch",
         partition_key=dynamodb.Attribute(
-            name="patientId",
+            name="encounterId",
             type=dynamodb.AttributeType.STRING,
         ),
         sort_key=dynamodb.Attribute(
-            name="recordType",
+            name="patientId",
             type=dynamodb.AttributeType.STRING,
         ),
-        table_name="PatientRecords",
+        table_name="EncounterWatch",
         stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
         billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,  # Use on-demand to handle variable workloads
     )
 
     table.add_global_secondary_index(
-        index_name="PatientClinicSchedule",
+        index_name="EncounterFirmNextPoll",
         partition_key=dynamodb.Attribute(
-            name="clinicId",
+            name="firmId",
             type=dynamodb.AttributeType.STRING,
         ),
         sort_key=dynamodb.Attribute(
-            name="scheduledTime",
+            name="nextPollAt",
             type=dynamodb.AttributeType.NUMBER,
         ),
         projection_type=dynamodb.ProjectionType.ALL,
     )
 
     table.add_global_secondary_index(
-        index_name="PatientStatusSchedule",
+        index_name="EncounterStatusNextPoll",
         partition_key=dynamodb.Attribute(
-            name="patientStatus",
+            name="encounterStatus",
             type=dynamodb.AttributeType.STRING,
         ),
         sort_key=dynamodb.Attribute(
-            name="scheduledTime",
+            name="nextPollAt",
             type=dynamodb.AttributeType.NUMBER,
         ),
         projection_type=dynamodb.ProjectionType.ALL,
     )
-
+    
     return table
 
 
-def create_imaging_metadata_table(scope: Construct) -> dynamodb.Table:
-    """Create and return the ImagingMetadata DynamoDB table with GSIs."""
+def create_document_watch_table(scope: Construct) -> dynamodb.Table:
+    """Create and return the DocumentWatch DynamoDB table with GSIs."""
     table = dynamodb.Table(
         scope,
-        "ImagingMetadata",
+        "DocumentWatch",
         partition_key=dynamodb.Attribute(
-            name="imageId",
+            name="fileId",
             type=dynamodb.AttributeType.STRING,
         ),
         sort_key=dynamodb.Attribute(
-            name="clinicId",
+            name="firmId",
             type=dynamodb.AttributeType.STRING,
         ),
-        table_name="ImagingMetadata",
+        table_name="DocumentWatch",
         stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
     )
 
     table.add_global_secondary_index(
-        index_name="PatientClinic",
+        index_name="PatientFirm",
         partition_key=dynamodb.Attribute(
             name="patientId",
             type=dynamodb.AttributeType.STRING,
         ),
         sort_key=dynamodb.Attribute(
-            name="clinicId",
+            name="firmId",
             type=dynamodb.AttributeType.STRING,
         ),
         projection_type=dynamodb.ProjectionType.ALL,
@@ -82,31 +82,31 @@ def create_imaging_metadata_table(scope: Construct) -> dynamodb.Table:
     return table
 
 
-def create_analysis_results_table(scope: Construct) -> dynamodb.Table:
-    """Create and return the AnalysisResults DynamoDB table with GSIs."""
+def create_ddx_results_table(scope: Construct) -> dynamodb.Table:
+    """Create and return the DdxAssistResults DynamoDB table with GSIs."""
     table = dynamodb.Table(
         scope,
-        "AnalysisResults",
+        "DdxAssistResults",
         partition_key=dynamodb.Attribute(
-            name="imageId",
+            name="fileId",
             type=dynamodb.AttributeType.STRING,
         ),
         sort_key=dynamodb.Attribute(
-            name="clinicId",
+            name="firmId",
             type=dynamodb.AttributeType.STRING,
         ),
-        table_name="AnalysisResults",
+        table_name="DdxAssistResults",
         stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
     )
 
     table.add_global_secondary_index(
-        index_name="PatientClinic",
+        index_name="PatientFirm",
         partition_key=dynamodb.Attribute(
             name="patientId",
             type=dynamodb.AttributeType.STRING,
         ),
         sort_key=dynamodb.Attribute(
-            name="clinicId",
+            name="firmId",
             type=dynamodb.AttributeType.STRING,
         ),
         projection_type=dynamodb.ProjectionType.ALL,
@@ -115,15 +115,30 @@ def create_analysis_results_table(scope: Construct) -> dynamodb.Table:
     return table
 
 
-def create_clinic_configs_table(scope: Construct) -> dynamodb.Table:
-    """Create and return the clinic-config-table DynamoDB table."""
+def create_firm_configs_table(scope: Construct) -> dynamodb.Table:
+    """Create and return the company-config-table DynamoDB table with GSIs."""
     table = dynamodb.Table(
         scope,
-        "clinic-config-table",
+        "company-config-table",
         partition_key=dynamodb.Attribute(
-            name="clinicName",
+            name="firmName",
             type=dynamodb.AttributeType.STRING,
         ),
-        table_name="clinic-config-table",
+        table_name="company-config-table",
+    )
+    return table
+
+
+def create_practitioner_whitelist_table(scope: Construct) -> dynamodb.Table:
+    """Create and return the PractitionerWhitelist DynamoDB table."""
+    table = dynamodb.Table(
+        scope,
+        "PractitionerWhitelist",
+        partition_key=dynamodb.Attribute(
+            name="id",
+            type=dynamodb.AttributeType.STRING,
+        ),
+        table_name="PractitionerWhitelist",
+        billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
     )
     return table

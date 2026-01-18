@@ -19,12 +19,12 @@ def create_scheduler_rule(scope: Construct, state_machine: sfn.StateMachine, rol
     Returns:
         The created EventBridge rule
     """
-    # Create a scheduled rule that triggers every 5 minutes
+    # Create a scheduled rule that triggers every minute
     rule = events.Rule(
         scope,
         "ImagingProcessorScheduler",
-        schedule=events.Schedule.rate(duration=events.Duration.minutes(5)),
-        description="Triggers the medical imaging processor state machine every 5 minutes",
+        schedule=events.Schedule.cron(minute="*/1"),
+        description="Triggers the medical imaging processor state machine every minute",
     )
     
     # Add target to invoke the state machine when the rule triggers

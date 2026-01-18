@@ -1,0 +1,125 @@
+Comment: >-
+  Per-1-min trigger → 3×10s DocumentPoll. Per firm: refresh creds + single EncounterPoll,
+  then N parallel Document-Poller workers (safe via DynamoDB claim/lease).
+  Optimized for Express workflow 5-minute limit.
+StartAt: InitLoop
+States:
+  InitLoop:
+    Type: Pass
+    Result:
+      i: 0
+      docWorkers: 2
+      workerIds:
+        - 0
+        - 1
+    ResultPath: $.loop
+    Next: ScanActiveFirms
+  ScanActiveFirms:
+    Type: Task
+    Resource: arn:aws:states:::aws-sdk:dynamodb:scan
+    Parameters:
+      TableName: company-config-table
+      FilterExpression: isActive = :t
+      ExpressionAttributeValues:
+        ':t':
+          Bool: true
+      ProjectionExpression: firmName,firmId
+    ResultSelector:
+      Items.$: $.Items
+    ResultPath: $.firms
+    Next: PerFirmSetup
+  PerFirmSetup:
+    Type: Map
+    ItemsPath: $.firms.Items
+    MaxConcurrency: 10
+    Parameters:
+      firmId.$: $$.Map.Item.Value.firmId.S
+      firmName.$: $$.Map.Item.Value.firmName.S
+      workerIds.$: $.loop.workerIds
+      docWorkers.$: $.loop.docWorkers
+    Iterator:
+      StartAt: GetRefreshCreds
+      States:
+        GetRefreshCreds:
+          Type: Task
+          Resource: ${PLACEHOLDER_FUNCTION_ARN_1}
+          ResultPath: $.tokens
+          Next: EncounterPollerTask
+        EncounterPollerTask:
+          Type: Task
+          Resource: ${PLACEHOLDER_FUNCTION_ARN_2}
+          Parameters:
+            mode: poll
+            firmId.$: $.firmId
+            tokens.$: $.tokens
+          ResultPath: null
+          Next: BuildFirmCtx
+        BuildFirmCtx:
+          Type: Pass
+          Parameters:
+            firmId.$: $.firmId
+            firmName.$: $.firmName
+            tokens.$: $.tokens
+            workerIds.$: $.workerIds
+            docWorkers.$: $.docWorkers
+          End: true
+    ResultPath: $.firmCtx
+    Next: LoopChoice
+  LoopChoice:
+    Type: Choice
+    Choices:
+      - Next: DocPollMap
+        Variable: $.loop.i
+        NumericLessThan: 4
+    Default: Terminal
+  DocPollMap:
+    Type: Map
+    ItemsPath: $.firmCtx
+    MaxConcurrency: 10
+    Parameters:
+      firmId.$: $$.Map.Item.Value.firmId
+      firmName.$: $$.Map.Item.Value.firmName
+      tokens.$: $$.Map.Item.Value.tokens
+      workerIds.$: $$.Map.Item.Value.workerIds
+      docWorkers.$: $$.Map.Item.Value.docWorkers
+    Iterator:
+      StartAt: DocWorkerFanout
+      States:
+        DocWorkerFanout:
+          Type: Map
+          ItemsPath: $.workerIds
+          Parameters:
+            firmId.$: $.firmId
+            firmName.$: $.firmName
+            tokens.$: $.tokens
+            workerId.$: $$.Map.Item.Value
+          Iterator:
+            StartAt: DocumentPoller
+            States:
+              DocumentPoller:
+                Type: Task
+                Resource: ${PLACEHOLDER_FUNCTION_ARN_3}
+                Parameters:
+                  firmId.$: $.firmId
+                  tokens.$: $.tokens
+                  workerId.$: $.workerId
+                ResultPath: null
+                End: true
+          End: true
+    ResultPath: null
+    Next: Wait10
+  Wait10:
+    Type: Wait
+    Seconds: 10
+    Next: IncLoop
+  IncLoop:
+    Type: Pass
+    Parameters:
+      i.$: States.MathAdd($.loop.i, 1)
+      docWorkers.$: $.loop.docWorkers
+      workerIds.$: $.loop.workerIds
+    ResultPath: $.loop
+    Next: LoopChoice
+  Terminal:
+    Type: Pass
+    End: true

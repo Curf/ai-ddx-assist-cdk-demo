@@ -7,43 +7,49 @@ from constructs import Construct
 from typing import Tuple
 
 
-def create_analysis_queue(scope: Construct, role: iam.IRole) -> Tuple[sqs.Queue, sqs.Queue]:
+def create_composition_queue(scope: Construct, role: iam.IRole) -> Tuple[sqs.Queue, sqs.Queue]:
     """
-    Create an SQS queue for AI analysis results processing with a corresponding DLQ.
+    Create an SQS queue for composition creation processing with a corresponding DLQ.
+    
+    This queue receives messages from DdxAssistResults table inserts and triggers the
+    CreateComposition Lambda function to post results back to the EHR API.
     
     Returns:
         Tuple containing the main queue and its dead-letter queue
     """
     # Create dead-letter queue first
-    analysis_dlq = sqs.Queue(
+    composition_dlq = sqs.Queue(
         scope,
-        "AnalysisQueueDLQ",
-        queue_name="medical-imaging-analysis-dlq",
+        "CompositionQueueDLQ",
+        queue_name="ddx-assist-composition-dlq",
         retention_period=Duration.days(14),  # Keep messages for investigation
     )
 
     # Create main queue with reference to DLQ
-    analysis_queue = sqs.Queue(
+    composition_queue = sqs.Queue(
         scope,
-        "AnalysisQueue",
-        queue_name="medical-imaging-analysis-queue",
+        "CompositionQueue",
+        queue_name="ddx-assist-composition-queue",
         visibility_timeout=Duration.seconds(300),  # 5 minutes to process a message
         dead_letter_queue=sqs.DeadLetterQueue(
             max_receive_count=3,  # After 3 failed attempts, send to DLQ
-            queue=analysis_dlq,
+            queue=composition_dlq,
         ),
     )
 
     # Grant permissions to the role to use the queue
-    analysis_queue.grant_send_messages(role)
-    analysis_queue.grant_consume_messages(role)
+    composition_queue.grant_send_messages(role)
+    composition_queue.grant_consume_messages(role)
 
-    return analysis_queue, analysis_dlq
+    return composition_queue, composition_dlq
 
 
 def create_s3_upload_queue(scope: Construct, role: iam.IRole) -> Tuple[sqs.Queue, sqs.Queue]:
     """
     Create an SQS queue for S3 upload notifications with a corresponding DLQ.
+    
+    This queue receives messages from DocumentWatch table inserts and triggers the
+    DownloadImage Lambda function to download medical images using pre-signed URLs.
     
     Returns:
         Tuple containing the main queue and its dead-letter queue
@@ -52,7 +58,7 @@ def create_s3_upload_queue(scope: Construct, role: iam.IRole) -> Tuple[sqs.Queue
     s3_upload_dlq = sqs.Queue(
         scope,
         "S3UploadQueueDLQ",
-        queue_name="medical-imaging-s3-upload-dlq",
+        queue_name="mod-med-s3-upload-dlq",
         retention_period=Duration.days(14),
     )
 
@@ -60,7 +66,7 @@ def create_s3_upload_queue(scope: Construct, role: iam.IRole) -> Tuple[sqs.Queue
     s3_upload_queue = sqs.Queue(
         scope,
         "S3UploadQueue",
-        queue_name="medical-imaging-s3-upload-queue",
+        queue_name="mod-med-s3-upload-queue",
         visibility_timeout=Duration.seconds(180),  # 3 minutes to process a message
         dead_letter_queue=sqs.DeadLetterQueue(
             max_receive_count=3,
