@@ -14,7 +14,7 @@ A critical challenge during implementation was the discovery that the target EHR
 
 ### **2.1 The Objective**
 
-To build a seamless clinical workflow that analyzes patient charts immediately upon data entry, providing differential diagnosis (DDx) suggestions without interrupting the physician's workflow or requiring manual "Ask AI" button clicks.
+To build a seamless clinical workflow that analyzes patient charts immediately upon data entry, providing differential diagnosis (DDx) suggestions without interrupting the physician's workflow or requiring external button clicks.
 
 ### **2.2 The Integration Constraint**
 
@@ -43,7 +43,7 @@ To emulate real-time event processing within a polling environment, we utilized 
 We utilized **AWS Step Functions** to manage the polling lifecycle. This state machine approach allows for sophisticated flow control, such as "Wait" states, parallel branching, and automatic retries, which are difficult to manage in standalone cron scripts.
 
 <p align="center">
-  <img src="./resources/stepfunctions_graph_simple_enrich.png" alt="Step Function Architecture" width="35%" height="35%">
+  <img src="./resources/stepfunctions_graph_simple_enrich.png" alt="Step Function Architecture" width="50%" height="50%">
 </p>
 
 **The Workflow Logic:**
@@ -72,7 +72,7 @@ Once active encounters are secured via lease, the system enters a tight loop to 
 
 1. **Fan-Out Strategy:** The DocumentPoller utilizes a Map state to process firms concurrently.
 2. **Classification:** The system identifies documents based on user-selected categories, mapping them to specialized models:
-   * **Type A (Solitary):** e.g., Single lesions (Target: Object Detection models).
+   * **Type A (Solitary):** e.g., Single lesions (Target: Object Detection, followed by Classification models).
    * **Type B (Widespread):** e.g., Rashes (Target: Classification models).
 3. **Queueing:** Relevant documents are saved to a **DocumentWatch** table, which acts as an event trigger for the processing pipeline.
 
@@ -99,17 +99,18 @@ When a relevant document is detected, the system triggers an asynchronous proces
 #### **Phase 1: Ingestion**
 
 <p align="center">
-<img src="./resources/image_download.png" alt="Image Download event" width="35%" height="35%">
+<img src="./resources/image_download.png" alt="Image Download event">  
+ <!-- width="50%" height="50%"> -->
 </p>
 
 * **Trigger:** Insert to DocumentWatch table.
 * **Action:** DownloadImage Lambda uses pre-signed URLs to securely fetch the asset.
 * **Storage:** Image and metadata are saved to a secure, lifecycle-managed S3 bucket.
 
-#### **Phase 2: Inference**
+#### **Phase 2: Inference ([See repo for more detail](https://github.com/Curf/AIGetInference))**
 
 <p align="center">
-<img src="./resources/inference.png" alt="AI Inference event" width="35%" height="35%">
+<img src="./resources/inference.png" alt="AI Inference event" width="50%" height="50%">
 </p>
 
 * **Trigger:** Object creation in target S3 location.
@@ -122,7 +123,7 @@ When a relevant document is detected, the system triggers an asynchronous proces
 The final step closes the loop by writing the AI's findings back into the EMR.
 
 <p align="center">
-<img src="./resources/composition.png" alt="Composition event" width="35%" height="35%">
+<img src="./resources/composition.png" alt="Composition event" width="65%" height="65%">
 </p>
 
 * **Trigger:** Insert to AIAssistResults table.
