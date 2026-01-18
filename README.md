@@ -107,7 +107,7 @@ When a relevant document is detected, the system triggers an asynchronous proces
 * **Action:** DownloadImage Lambda uses pre-signed URLs to securely fetch the asset.
 * **Storage:** Image and metadata are saved to a secure, lifecycle-managed S3 bucket.
 
-#### **Phase 2: Inference ([See repo for more detail](https://github.com/Curf/AIGetInference))**
+#### **Phase 2: Inference ([See repo for more detail](https://github.com/Curf/curf/blob/main/case_studies/AIGetInference_case_study.md))**
 
 <p align="center">
 <img src="./resources/inference.png" alt="AI Inference event" width="50%" height="50%">
